@@ -136,7 +136,7 @@ struct PID
 
     auto pre_gain = (1.5 * proportional_val) + (0.05 * integral_val) + (0.01 * derivative_val);
     // map the pre_gain to a value between 0 to 1
-//    auto mapped_gain = 1 - (1 / (1 + abs(pre_gain)) );
+    //    auto mapped_gain = 1 - (1 / (1 + abs(pre_gain)) );
     auto mapped_gain = std::clamp(pre_gain, 0.0, 1.0); // Linear mapping
     if(mapped_gain > 1.0) mapped_gain = 1.0;
     if(mapped_gain < 0.0) mapped_gain = 0.0;
@@ -369,20 +369,16 @@ struct Main : public QMainWindow {
       run_sim_btn.setStyleSheet("background-color: red; color: white;");
       Simulation sim(sd,&pid_output); 
       sim.run();
-
     }
     else
     {
-      auto temp_series = sd->target_series;
-      sd->target_series = nullptr;
-      delete temp_series;
+      sd->target_series->clear();
+      sd->temp_series->clear();
 
       std::cout << "----------------------------\nSimulation Stopped\n----------------------------\n";
       run_sim_btn.setText("Run Simulation");
       run_sim_btn.setStyleSheet("background-color: white; color: black;");
-      auto temp_sd = sd;
-      sd = nullptr;
-      delete temp_sd;
+    
     }
 
   }
