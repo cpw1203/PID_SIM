@@ -5,6 +5,7 @@
 #include <QtWidgets>
 #include <chrono>
 #include <thread>
+#include <cmath>
 #include <ctime>
 #include <string.h>
 #include <QtCharts/QChartView>
@@ -47,6 +48,8 @@ struct SimData
   }
 };
 
+
+
 /** @brief Heater object that simulates the heating and temperature system 
  **        this model will use the Single Node Approach                   */
 struct Heater
@@ -58,17 +61,27 @@ struct Heater
   const double WATER_MASS = 100; // grams of water
   const double HEATING_PWR = 1300; // watts of power
   double current_temp;
+  double elapsed_time;
   explicit Heater(SimData* sd) {
     this->sd = sd; 
     current_temp = 0.0;
   }
   /** @brief calculate the new temperature of heater given PID calculation */
   inline double calculate_temp(double pid_gain) {
-    double dT = ((pid_gain*HEATING_PWR) / ( WATER_MASS * WATER_HC ) ) - (sd->disp_c * ( current_temp - sd->ambient_temp ) / ( WATER_MASS * WATER_HC));
+    elapsed_time += sd->dt;
+    double dis_amt =  sd->ambient_temp - std::exp( - sd->disp_c * elapsed_time);
+//      (sd->disp_c * ( current_temp - sd->ambient_temp ) / ( WATER_MASS * WATER_HC))
+    double dT = ((pid_gain*HEATING_PWR) / ( WATER_MASS * WATER_HC ) ) - dis_amt;
     current_temp += dT * sd->dt;
     return current_temp;
   } 
 
+};
+
+/** @brief Node of Water Tank of Espresso */
+struct TankNode
+{
+  
 };
 
 // @brief PID object to handle the PID system and calculate the gain given the error of the system */
@@ -83,6 +96,7 @@ struct PID
   double integral_val;
   double previous_error;
   double integral_limit = 100.0;
+  double derivative_val = 0.0;
   /** @brief constructor of PID object */
   PID(SimData* sd) {
     current_temp = sd->ambient_temp;
@@ -100,18 +114,21 @@ struct PID
     
     // calculate error and P in PID
     double error =  sd->target_temp - current_temp;
-    auto proportional_val = error * sd->kp;
+    auto proportional_val = error;
+
     // calculate I in PID
     auto sample_accum = error * sd->dt;
     integral_val += sample_accum;
+    if(integral_val > integral_limit) integral_val = integral_limit;
+    if(integral_val < -integral_limit) integral_val = -integral_limit;
+
     // calculate D in PID
-    auto derivative_val = (error - previous_error) / sd->dt;
+    derivative_val = (sd->dt != 0) ? (error - previous_error) / sd->dt : 0.0;
     previous_error = error;
     // calculate PID pre-mapped output
-    if(integral_val > integral_limit) integral_val = integral_limit;
-    if(integral_val < integral_limit) integral_val = -integral_limit;
 
-    auto pre_gain = proportional_val + (sd->ki*integral_val) + (sd->kd*derivative_val);
+
+    auto pre_gain = (1.5 * proportional_val) + (0.05 * integral_val) + (0.01 * derivative_val);
     // map the pre_gain to a value between 0 to 1
     auto mapped_gain = 1 - (1 / (1 + abs(pre_gain)) );
     if(mapped_gain > 1.0) mapped_gain = 1.0;
@@ -125,6 +142,7 @@ struct PID
       << "Error:        " << pid.previous_error << std::endl
       << "Gain:         " << pid.current_gain << std::endl
       << "Integral:     " << pid.integral_val << std::endl
+      << "Derivative:   " << pid.derivative_val << std::endl
       << "Current Temp: " << pid.current_temp << std::endl
       << "Target Temp: " << pid.target_temp << std::endl;
     return os;
@@ -138,10 +156,12 @@ struct PID
 struct InputBox : public QGroupBox {
   // InputBox Variables
   QVBoxLayout layout;
-  QSpinBox select;
+QDoubleSpinBox select;
   /** @brief Constructor of Input Box */
   InputBox(std::string title, QWidget* parent = nullptr) : QGroupBox(QString::fromStdString(title),parent), select(parent) {
     layout.addWidget(&select);
+    select.setRange(0,1000);
+    select.setSingleStep(.01);
     this->setLayout(&layout);
     this->setStyleSheet("QGroupBox {background: #242424;} QGroupBox:Title { color: white; }");
   }
@@ -266,13 +286,14 @@ struct Simulation
 
     while(this->get_time() <= static_cast<double>(sd->duration))
     {
+
+      pid_out->chart.update();
       auto pid_gain = pid.calc_gain();
       auto temp = heater.calculate_temp(pid_gain);
       pid.set_current_temp(temp);
 
       //plot data
       sd->temp_series->append(this->get_time(),temp);
-      pid_out->chart.update();
       std::cout << pid << std::endl;
     }
 
