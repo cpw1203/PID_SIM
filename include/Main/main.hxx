@@ -64,25 +64,31 @@ struct Heater
   double elapsed_time;
   explicit Heater(SimData* sd) {
     this->sd = sd; 
-    current_temp = 0.0;
+    current_temp = sd->ambient_temp;
   }
   /** @brief calculate the new temperature of heater given PID calculation */
   inline double calculate_temp(double pid_gain) {
+    //Increment elapsed time
     elapsed_time += sd->dt;
-    double dis_amt =  sd->ambient_temp - std::exp( - sd->disp_c * elapsed_time);
-//      (sd->disp_c * ( current_temp - sd->ambient_temp ) / ( WATER_MASS * WATER_HC))
-    double dT = ((pid_gain*HEATING_PWR) / ( WATER_MASS * WATER_HC ) ) - dis_amt;
-    current_temp += dT * sd->dt;
+
+    // Dissipation amount: proportional to the temperature difference and dissipation constant
+    double temp_diff = current_temp - sd->ambient_temp;
+    double dis_amt = (sd->disp_c * temp_diff) / (WATER_MASS * WATER_HC);
+
+    // Heat addition due to PID-controlled power
+    double heat_input = (pid_gain * HEATING_PWR) / (WATER_MASS * WATER_HC);
+
+    // Net temperature change
+    double dT = heat_input - dis_amt;
+
+    // Update current temperature
+    current_temp += dT * sd->dt*1000;
+
     return current_temp;
   } 
 
 };
 
-/** @brief Node of Water Tank of Espresso */
-struct TankNode
-{
-  
-};
 
 // @brief PID object to handle the PID system and calculate the gain given the error of the system */
 struct PID
@@ -111,7 +117,7 @@ struct PID
   void set_current_temp(double temp) { this->current_temp = temp; }
   /** @brief calculate the gain given system data and current error */
   double calc_gain(){
-    
+
     // calculate error and P in PID
     double error =  sd->target_temp - current_temp;
     auto proportional_val = error;
@@ -130,7 +136,8 @@ struct PID
 
     auto pre_gain = (1.5 * proportional_val) + (0.05 * integral_val) + (0.01 * derivative_val);
     // map the pre_gain to a value between 0 to 1
-    auto mapped_gain = 1 - (1 / (1 + abs(pre_gain)) );
+//    auto mapped_gain = 1 - (1 / (1 + abs(pre_gain)) );
+    auto mapped_gain = std::clamp(pre_gain, 0.0, 1.0); // Linear mapping
     if(mapped_gain > 1.0) mapped_gain = 1.0;
     if(mapped_gain < 0.0) mapped_gain = 0.0;
     current_gain = mapped_gain;
@@ -156,7 +163,7 @@ struct PID
 struct InputBox : public QGroupBox {
   // InputBox Variables
   QVBoxLayout layout;
-QDoubleSpinBox select;
+  QDoubleSpinBox select;
   /** @brief Constructor of Input Box */
   InputBox(std::string title, QWidget* parent = nullptr) : QGroupBox(QString::fromStdString(title),parent), select(parent) {
     layout.addWidget(&select);
@@ -194,6 +201,16 @@ struct PIDInput : public QGroupBox {
     disp_coefficient("Disipation Constant",this),
     ambient_temp("ambient temp",this)
   {
+    // Set Default Values
+    target_temp.select.setValue(60);
+    duration.select.setValue(30);
+    ki.select.setValue(0.01);
+    kp.select.setValue(1.5);
+    kd.select.setValue(0.05);
+    dt.select.setValue(1);
+    ambient_temp.select.setValue(20);
+    disp_coefficient.select.setValue(1);
+
     this->setStyleSheet("QGroupBox {background: #242424;  } QGroupBox:Title { color: white; }");
     layout.addWidget(&duration, 0,0,1,-1);
     layout.addWidget(&target_temp, 1,0,1,-1);
@@ -273,29 +290,34 @@ struct Simulation
   {
     sd->target_series = new QLineSeries();
     sd->temp_series = new QSplineSeries();
-    for(int i = 0; i < sd->duration; i++){
+    for(int i = 0; i < sd->duration; i++)
+    {
       sd->target_series->append(i,sd->target_temp);
     }
+
     pid_out->chart.addSeries(sd->target_series);
     pid_out->chart.addSeries(sd->temp_series);
     sd->target_series->attachAxis(&pid_out->temp_axis);
     sd->temp_series->attachAxis(&pid_out->temp_axis);
-
     sd->target_series->attachAxis(&pid_out->time_axis);
     sd->temp_series->attachAxis(&pid_out->time_axis);
 
-    while(this->get_time() <= static_cast<double>(sd->duration))
+
+    double sim_time = 0.0;
+    while(sim_time <= static_cast<double>(sd->duration))
     {
 
-      pid_out->chart.update();
       auto pid_gain = pid.calc_gain();
       auto temp = heater.calculate_temp(pid_gain);
       pid.set_current_temp(temp);
 
       //plot data
-      sd->temp_series->append(this->get_time(),temp);
-      std::cout << pid << std::endl;
+      sd->temp_series->append(sim_time,temp);
+
+      pid_out->chart.update();
+      sim_time += sd->dt;
     }
+
 
 
 
