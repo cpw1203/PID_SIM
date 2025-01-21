@@ -19,15 +19,15 @@ using namespace QtCharts;
 /** @brief Wrapper of Set values for simulation */
 struct SimData
 {
-  int target_temp;
-  int duration;
-  int temp_c;
-  int dt;
-  int kp;
-  int ki;
-  int kd;
-  int disp_c;
-  int ambient_temp;
+  double target_temp;
+  double duration;
+  double temp_c;
+  double dt;
+  double kp;
+  double ki;
+  double kd;
+  double disp_c;
+  double ambient_temp;
 
   std::shared_ptr<QSplineSeries> temp_series;
   std::shared_ptr<QLineSeries> target_series;
@@ -38,9 +38,9 @@ struct SimData
   SimData() = default; 
 
   // Constructor with parameter list to support brace-enclosed initialization
-  SimData(int target_temp, int duration, int temp_c, int dt, int kp, int
-      ki, int kd, 
-      int disp_c, int ambient_temp)
+  SimData(double target_temp, double duration, double temp_c, double dt, double kp, double
+      ki, double kd, 
+      double disp_c, double ambient_temp)
     : target_temp(target_temp),
     duration(duration),
     temp_c(temp_c),
@@ -194,7 +194,7 @@ struct InputBox : public QGroupBox {
     this->setStyleSheet("QGroupBox {background: #242424;} QGroupBox:Title { color: white; }");
   }
   /** @brief getter for internal value */
-  int get_data() { return this->select.value(); }
+  double get_data() { return this->select.value(); }
 
 };
 
@@ -258,6 +258,22 @@ struct PIDInput : public QGroupBox {
   }
 
 };
+
+
+struct RelayPWMOutput
+{
+  std::shared_ptr<SimData> sd;
+
+  RelayPWMOutput(std::shared_ptr<SimData> sd) {this->sd = sd;}
+
+  void generate_pulse_width(double prop_on)
+  {
+    // generate a lineSeries that depicts the PWM signal for that period given
+    // sample time
+
+  }
+};
+
 
 /** @brief Handles the output of the PID output */
 struct PIDOutput : public QGroupBox {
@@ -336,10 +352,44 @@ struct Simulation
       sd->temp_series->append(sim_time,temp);
 
       pid_out->chart.update();
+      // Dynamically adjust axis range
+      adjustAxisRange(sd->temp_series.get(), &pid_out->temp_axis);
+      adjustXAxisRange(sd->temp_series.get(), &pid_out->time_axis);
       sim_time += sd->dt;
     }
 
   }
+
+  // Dynamically adjust range based on the series' data
+  void adjustAxisRange(QLineSeries* series, QValueAxis* axis) {
+    if (!series->points().isEmpty()) {
+      qreal min = series->points().first().y();
+      qreal max = series->points().first().y()+50;
+      for (const QPointF& point : series->points()) {
+        if (point.y() < min) min =
+          point.y();
+        if (point.y() > max)
+          max = point.y();
+      }
+      axis->setRange(min,max);
+    }
+  }
+  // Dynamically adjust range based on the series' data
+  void adjustXAxisRange(QLineSeries* series, QValueAxis* axis) {
+    if (!series->points().isEmpty()) {
+      qreal min = series->points().first().x();
+      qreal max = series->points().first().x();
+      for (const QPointF& point : series->points()) {
+        if (point.x() < min) min =
+          point.y();
+        if (point.x() > max)
+          max = point.x();
+      }
+      axis->setRange(min,max);
+    }
+  }
+
+
   /** @brief get current elapsed time since start of PID */
   double get_time() {
     end_time = std::chrono::high_resolution_clock::now();
