@@ -29,9 +29,30 @@ struct SimData
   int disp_c;
   int ambient_temp;
 
-  std::unique_ptr<QSplineSeries> temp_series;
-  std::unique_ptr<QLineSeries> target_series;
+  std::shared_ptr<QSplineSeries> temp_series;
+  std::shared_ptr<QLineSeries> target_series;
 
+  // Move constructor and Copy Constructor
+  SimData(SimData&&) noexcept = default;
+  SimData& operator=(SimData&&) noexcept = default;
+  SimData() = default; 
+
+  // Constructor with parameter list to support brace-enclosed initialization
+  SimData(int target_temp, int duration, int temp_c, int dt, int kp, int
+      ki, int kd, 
+      int disp_c, int ambient_temp)
+    : target_temp(target_temp),
+    duration(duration),
+    temp_c(temp_c),
+    dt(dt),
+    kp(kp),
+    ki(ki),
+    kd(kd),
+    disp_c(disp_c),
+    ambient_temp(ambient_temp),
+    temp_series(std::make_shared<QSplineSeries>()),
+    target_series(std::make_shared<QLineSeries>())
+  {}
 
   friend std::ostream& operator<<(std::ostream& os, const SimData& sd) {
     os << "SIM Data"
@@ -56,14 +77,14 @@ struct Heater
 {
   // Heater Variables
   /** @brief constructor of Heater */
-  SimData* sd;
+  std::shared_ptr<SimData> sd;
   const double WATER_HC = 4186;
   const double WATER_MASS = 100; // grams of water
   const double HEATING_PWR = 1300; // watts of power
   double current_temp;
   double elapsed_time;
-  explicit Heater(SimData* sd) {
-    this->sd = sd; 
+  explicit Heater(std::shared_ptr<SimData> sd) {
+    this->sd = sd;
     current_temp = sd->ambient_temp;
   }
   /** @brief calculate the new temperature of heater given PID calculation */
@@ -85,7 +106,7 @@ struct Heater
     current_temp += dT * sd->dt*1000;
 
     return current_temp;
-  } 
+  }
 
 };
 
@@ -94,7 +115,7 @@ struct Heater
 struct PID
 {
   // PID Variables
-  SimData* sd;
+  std::shared_ptr<SimData> sd;
   double current_temp;
   double target_temp;
   double current_gain;
@@ -104,7 +125,7 @@ struct PID
   double integral_limit = 100.0;
   double derivative_val = 0.0;
   /** @brief constructor of PID object */
-  PID(SimData* sd) {
+  PID(std::shared_ptr<SimData> sd) {
     current_temp = sd->ambient_temp;
     target_temp = sd->target_temp;
     current_gain = 0.0;
@@ -275,12 +296,12 @@ struct Simulation
 {
   PID pid;
   Heater heater;
-  SimData* sd;
-  PIDOutput* pid_out;
+  std::shared_ptr<SimData> sd;
+  std::shared_ptr<PIDOutput> pid_out;
   std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
   std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
 
-  explicit Simulation(SimData* sim_data,PIDOutput* pid_out) : pid(sim_data), heater(sim_data) {
+  explicit Simulation(std::shared_ptr<SimData> sim_data,std::shared_ptr<PIDOutput> pid_out) : pid(sim_data), heater(sim_data) {
     sd = sim_data;
     this->pid_out = pid_out;
     start_time = std::chrono::high_resolution_clock::now();
@@ -334,21 +355,21 @@ struct Main : public QMainWindow {
   QPushButton run_sim_btn;
   QGridLayout layout;
   PIDInput pid_input;
-  PIDOutput pid_output;
-  std::unique_ptr<SimData> sd;
+  std::shared_ptr<PIDOutput> pid_output;
+  std::shared_ptr<SimData> sd;
   bool running;
   /** @brief Constructor of Main object */
   Main(QWidget* parent = nullptr) : 
     QMainWindow(parent),
     pid_input("PID Input", this),
-    pid_output("PID Simulation",this),
+    pid_output(std::make_shared<PIDOutput>("PID Simulation",this)),
     run_sim_btn("Run Simulation") {
       running = false;
       QObject::connect(&run_sim_btn, &QPushButton::pressed, this, &Main::run);
 
       this->setMenuWidget(&run_sim_btn);
       layout.addWidget(&pid_input,0,0);
-      layout.addWidget(&pid_output,1,0);
+      layout.addWidget(pid_output.get(),1,0);
       central_widget.setLayout(&layout);
       this->setCentralWidget(&central_widget);
       this->resize(1000,1000);
@@ -357,15 +378,14 @@ struct Main : public QMainWindow {
   {
     running = !running;
 
-    this->sd = std::make_unique<SimData>();
-    auto sd_tmp = pid_input.get_sim_data();
+    this->sd = std::make_shared<SimData>(pid_input.get_sim_data());
     if(running)
     {
 
-      std::cout << "Simulation Started\n----------------------------\n"<< sd;
+      std::cout << "Simulation Started\n----------------------------\n" << *sd;
       run_sim_btn.setText("Reset Simulation");
       run_sim_btn.setStyleSheet("background-color: red; color: white;");
-      Simulation sim(sd,&pid_output);
+      Simulation sim(sd,pid_output);
       sim.run();
     }
     else
