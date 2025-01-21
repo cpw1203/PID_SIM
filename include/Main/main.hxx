@@ -29,8 +29,8 @@ struct SimData
   int disp_c;
   int ambient_temp;
 
-  QSplineSeries* temp_series;
-  QLineSeries* target_series;
+  std::unique_ptr<QSplineSeries> temp_series;
+  std::unique_ptr<QLineSeries> target_series;
 
 
   friend std::ostream& operator<<(std::ostream& os, const SimData& sd) {
@@ -225,15 +225,15 @@ struct PIDInput : public QGroupBox {
   /** @brief Get the inputed simulation data */
   SimData get_sim_data() {
     return (SimData){ target_temp.get_data(),
-      duration.get_data(), 
-      0, 
-      dt.get_data(), 
-      kp.get_data(), 
-      ki.get_data(), 
-      kd.get_data(), 
+      duration.get_data(),
+      0,
+      dt.get_data(),
+      kp.get_data(),
+      ki.get_data(),
+      kd.get_data(),
       disp_coefficient.get_data(),
       ambient_temp.get_data()
-    }; 
+    };
   }
 
 };
@@ -249,7 +249,7 @@ struct PIDOutput : public QGroupBox {
   /** @brief Constructor
     @param title of the chart */
   PIDOutput(std::string title, QWidget* parent = nullptr) : QGroupBox(QString::fromStdString(title),parent) {
-    layout.addWidget(&chart_view); 
+    layout.addWidget(&chart_view);
 
     // Set up chart in SimOut
     this->chart_view.setChart(&this->chart);
@@ -288,15 +288,15 @@ struct Simulation
   }
   void run()
   {
-    sd->target_series = new QLineSeries();
-    sd->temp_series = new QSplineSeries();
+    sd->target_series = std::make_unique<QLineSeries>();
+    sd->temp_series = std::make_unique<QSplineSeries>();
     for(int i = 0; i < sd->duration; i++)
     {
       sd->target_series->append(i,sd->target_temp);
     }
 
-    pid_out->chart.addSeries(sd->target_series);
-    pid_out->chart.addSeries(sd->temp_series);
+    pid_out->chart.addSeries(sd->target_series.get());
+    pid_out->chart.addSeries(sd->temp_series.get());
     sd->target_series->attachAxis(&pid_out->temp_axis);
     sd->temp_series->attachAxis(&pid_out->temp_axis);
     sd->target_series->attachAxis(&pid_out->time_axis);
@@ -318,9 +318,6 @@ struct Simulation
       sim_time += sd->dt;
     }
 
-
-
-
   }
   /** @brief get current elapsed time since start of PID */
   double get_time() {
@@ -338,7 +335,7 @@ struct Main : public QMainWindow {
   QGridLayout layout;
   PIDInput pid_input;
   PIDOutput pid_output;
-  SimData* sd;
+  std::unique_ptr<SimData> sd;
   bool running;
   /** @brief Constructor of Main object */
   Main(QWidget* parent = nullptr) : 
@@ -360,25 +357,22 @@ struct Main : public QMainWindow {
   {
     running = !running;
 
-    this->sd = new SimData{pid_input.get_sim_data()};
+    this->sd = std::make_unique<SimData>();
+    auto sd_tmp = pid_input.get_sim_data();
     if(running)
     {
 
       std::cout << "Simulation Started\n----------------------------\n"<< sd;
       run_sim_btn.setText("Reset Simulation");
       run_sim_btn.setStyleSheet("background-color: red; color: white;");
-      Simulation sim(sd,&pid_output); 
+      Simulation sim(sd,&pid_output);
       sim.run();
     }
     else
     {
-      sd->target_series->clear();
-      sd->temp_series->clear();
-
       std::cout << "----------------------------\nSimulation Stopped\n----------------------------\n";
       run_sim_btn.setText("Run Simulation");
       run_sim_btn.setStyleSheet("background-color: white; color: black;");
-    
     }
 
   }

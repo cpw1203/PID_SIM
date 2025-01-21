@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.1.6)
+cmake_minimum_required(VERSION 3.2)
+set(CMAKE_BUILD_TYPE Debug)
 project(PID VERSION 1.0)
 
 set(CMAKE_CXX_STANDARD 17)
