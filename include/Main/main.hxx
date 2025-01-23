@@ -260,11 +260,19 @@ struct PIDInput : public QGroupBox {
 };
 
 
-struct RelayPWMOutput
+
+struct RelayPWMOutput : public QGroupBox
 {
   std::shared_ptr<SimData> sd;
-
-  RelayPWMOutput(std::shared_ptr<SimData> sd) {this->sd = sd;}
+  QGridLayout layout;
+  QLCDNumber duty_cycle;
+  QLCDNumber duration;
+  RelayPWMOutput(std::string title, QWidget* parent) : QGroupBox(QString::fromStdString(title), parent)
+  {
+    layout.addWidget(&duty_cycle,1,0);
+    layout.addWidget(&duration,0,0);
+    this->setLayout(&layout);
+  }
 
   void generate_pulse_width(double prop_on)
   {
@@ -280,14 +288,15 @@ struct PIDOutput : public QGroupBox {
   QGridLayout layout;
   QChartView chart_view;
   QChart chart;
+  RelayPWMOutput r_pwm;
   QValueAxis temp_axis;
   QValueAxis time_axis;
 
   /** @brief Constructor
     @param title of the chart */
-  PIDOutput(std::string title, QWidget* parent = nullptr) : QGroupBox(QString::fromStdString(title),parent) {
-    layout.addWidget(&chart_view);
-
+  PIDOutput(std::string title, QWidget* parent = nullptr) : QGroupBox(QString::fromStdString(title),parent), r_pwm("Relay PWM",this) {
+    layout.addWidget(&chart_view,0,0);
+    layout.addWidget(&r_pwm,0,1);
     // Set up chart in SimOut
     this->chart_view.setChart(&this->chart);
 
