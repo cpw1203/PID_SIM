@@ -29,8 +29,12 @@ struct SimData
   double disp_c;
   double ambient_temp;
 
+  // series for Sim output of temperature
   std::shared_ptr<QSplineSeries> temp_series;
   std::shared_ptr<QLineSeries> target_series;
+
+  //series for Sim output of PWM output
+  std::shared_ptr<QLineSeries> pwm_series;
 
   // Move constructor and Copy Constructor
   SimData(SimData&&) noexcept = default;
@@ -91,25 +95,18 @@ struct Heater
   inline double calculate_temp(double pid_gain) {
     //Increment elapsed time
     elapsed_time += sd->dt;
-
     // Dissipation amount: proportional to the temperature difference and dissipation constant
     double temp_diff = current_temp - sd->ambient_temp;
     double dis_amt = (sd->disp_c * temp_diff) / (WATER_MASS * WATER_HC);
-
     // Heat addition due to PID-controlled power
     double heat_input = (pid_gain * HEATING_PWR) / (WATER_MASS * WATER_HC);
-
     // Net temperature change
     double dT = heat_input - dis_amt;
-
     // Update current temperature
     current_temp += dT * sd->dt*1000;
-
     return current_temp;
   }
-
 };
-
 
 // @brief PID object to handle the PID system and calculate the gain given the error of the system */
 struct PID
@@ -153,11 +150,8 @@ struct PID
     derivative_val = (sd->dt != 0) ? (error - previous_error) / sd->dt : 0.0;
     previous_error = error;
     // calculate PID pre-mapped output
-
-
-    auto pre_gain = (1.5 * proportional_val) + (0.05 * integral_val) + (0.01 * derivative_val);
+    auto pre_gain = (sd->kp * proportional_val) + (sd->ki * integral_val) + (sd->kd * derivative_val);
     // map the pre_gain to a value between 0 to 1
-    //    auto mapped_gain = 1 - (1 / (1 + abs(pre_gain)) );
     auto mapped_gain = std::clamp(pre_gain, 0.0, 1.0); // Linear mapping
     if(mapped_gain > 1.0) mapped_gain = 1.0;
     if(mapped_gain < 0.0) mapped_gain = 0.0;
@@ -223,14 +217,14 @@ struct PIDInput : public QGroupBox {
     ambient_temp("ambient temp",this)
   {
     // Set Default Values
-    target_temp.select.setValue(60);
-    duration.select.setValue(30);
+    target_temp.select.setValue(100);
+    duration.select.setValue(120);
     ki.select.setValue(0.01);
     kp.select.setValue(1.5);
     kd.select.setValue(0.05);
     dt.select.setValue(1);
-    ambient_temp.select.setValue(20);
-    disp_coefficient.select.setValue(1);
+    ambient_temp.select.setValue(22.22);
+    disp_coefficient.select.setValue(2);
 
     this->setStyleSheet("QGroupBox {background: #242424;  } QGroupBox:Title { color: white; }");
     layout.addWidget(&duration, 0,0,1,-1);
