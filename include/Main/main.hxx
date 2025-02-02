@@ -33,9 +33,6 @@ struct SimData
   std::shared_ptr<QSplineSeries> temp_series;
   std::shared_ptr<QLineSeries> target_series;
 
-  //series for Sim output of PWM output
-  std::shared_ptr<QLineSeries> pwm_series;
-
   // Move constructor and Copy Constructor
   SimData(SimData&&) noexcept = default;
   SimData& operator=(SimData&&) noexcept = default;
@@ -254,75 +251,18 @@ struct PIDInput : public QGroupBox {
 };
 
 
-
-struct RelayPWMOutput : public QGroupBox
-{
-  std::shared_ptr<SimData> sd;
-  QGridLayout layout;
-  QLCDNumber duty_cycle;
-  QLCDNumber duration;
-  QChartView chart_view;
-  QChart chart;
-  QValueAxis voltage_axis;
-  QValueAxis time_axis;
-  std::unique_ptr<QLineSeries> pwm_series; 
-  RelayPWMOutput(std::string title, QWidget* parent) : QGroupBox(QString::fromStdString(title), parent)
-  {
-    layout.addWidget(&duty_cycle,0,0);
-    layout.addWidget(&duration,0,1);
-    layout.addWidget(&chart_view,1,0,1,-1);
-    chart_view.setRenderHint(QPainter::Antialiasing);
-    chart_view.setChart(&chart);
-    chart.addAxis(&voltage_axis, Qt::AlignLeft);
-    voltage_axis.setRange(0,1);
-    voltage_axis.setTitleText("Voltage (mV)");
-    time_axis.setRange(0,1000);
-    time_axis.setTitleText("Time (ms)");
-    chart.addAxis(&time_axis, Qt::AlignBottom);
-
-
-    this->setLayout(&layout);
-  }
-
-  void generate_pulse_width(double duty_cycle)
-  {
-    // generate a lineSeries that depicts the PWM signal for that period given
-    // sample time
-    double time_on = sd->dt * duty_cycle;
-    double time_off = sd->dt - time_on;
-    pwm_series = std::make_unique<QLineSeries>();
-    chart.addSeries(pwm_series.get());
-    for(double i = 0; i < sd->dt; i += sd->dt*0.1)
-    {
-      if(i <= time_on)
-      {
-        pwm_series->append(1,i);
-      }
-      else
-      {
-        pwm_series->append(0,i);
-      }
-    }
-    chart.update();
-
-  }
-};
-
-
 /** @brief Handles the output of the PID output */
 struct PIDOutput : public QGroupBox {
   QGridLayout layout;
   QChartView chart_view;
   QChart chart;
-  RelayPWMOutput r_pwm;
   QValueAxis temp_axis;
   QValueAxis time_axis;
 
   /** @brief Constructor
     @param title of the chart */
-  PIDOutput(std::string title, QWidget* parent = nullptr) : QGroupBox(QString::fromStdString(title),parent), r_pwm("Relay PWM",this) {
-    layout.addWidget(&chart_view,1,0);
-    layout.addWidget(&r_pwm,0,0);
+  PIDOutput(std::string title, QWidget* parent = nullptr) : QGroupBox(QString::fromStdString(title),parent) {
+    layout.addWidget(&chart_view,0,0);
     // Set up chart in SimOut
     this->chart_view.setChart(&this->chart);
 
@@ -337,8 +277,6 @@ struct PIDOutput : public QGroupBox {
     this->setStyleSheet("QGroupBox {background: #242424;} QGroupBox:Title { color: white; }");
     this->chart.setTitle("Temperature Over Time");
   }
-
-
 
 };
 
@@ -382,7 +320,6 @@ struct Simulation
       auto pid_gain = pid.calc_gain();
       auto temp = heater.calculate_temp(pid_gain);
       pid.set_current_temp(temp);
-      pid_out->r_pwm.generate_pulse_width(pid_gain);
       //plot data
       sd->temp_series->append(sim_time,temp);
 
@@ -444,7 +381,7 @@ struct Main : public QMainWindow {
   std::shared_ptr<SimData> sd;
   bool running;
   /** @brief Constructor of Main object */
-  Main(QWidget* parent = nullptr) : 
+  Main(QWidget* parent = nullptr) :
     QMainWindow(parent),
     pid_input("PID Input", this),
     pid_output(std::make_shared<PIDOutput>("PID Simulation",this)),
