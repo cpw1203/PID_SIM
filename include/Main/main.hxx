@@ -155,7 +155,7 @@ struct PID
     // calculate PID pre-mapped output
 
 
-    auto pre_gain = (1.5 * proportional_val) + (0.05 * integral_val) + (0.01 * derivative_val);
+    auto pre_gain = (sd->kp * proportional_val) + (sd->ki * integral_val) + (sd->kd * derivative_val);
     // map the pre_gain to a value between 0 to 1
     //    auto mapped_gain = 1 - (1 / (1 + abs(pre_gain)) );
     auto mapped_gain = std::clamp(pre_gain, 0.0, 1.0); // Linear mapping
@@ -223,14 +223,14 @@ struct PIDInput : public QGroupBox {
     ambient_temp("ambient temp",this)
   {
     // Set Default Values
-    target_temp.select.setValue(60);
-    duration.select.setValue(30);
+    target_temp.select.setValue(100);
+    duration.select.setValue(120);
     ki.select.setValue(0.01);
     kp.select.setValue(1.5);
     kd.select.setValue(0.05);
     dt.select.setValue(1);
-    ambient_temp.select.setValue(20);
-    disp_coefficient.select.setValue(1);
+    ambient_temp.select.setValue(22.2);
+    disp_coefficient.select.setValue(3);
 
     this->setStyleSheet("QGroupBox {background: #242424;  } QGroupBox:Title { color: white; }");
     layout.addWidget(&duration, 0,0,1,-1);
@@ -267,17 +267,49 @@ struct RelayPWMOutput : public QGroupBox
   QGridLayout layout;
   QLCDNumber duty_cycle;
   QLCDNumber duration;
+  QChartView chart_view;
+  QChart chart;
+  QValueAxis voltage_axis;
+  QValueAxis time_axis;
+  std::unique_ptr<QLineSeries> pwm_series; 
   RelayPWMOutput(std::string title, QWidget* parent) : QGroupBox(QString::fromStdString(title), parent)
   {
-    layout.addWidget(&duty_cycle,1,0);
-    layout.addWidget(&duration,0,0);
+    layout.addWidget(&duty_cycle,0,0);
+    layout.addWidget(&duration,0,1);
+    layout.addWidget(&chart_view,1,0,1,-1);
+    chart_view.setRenderHint(QPainter::Antialiasing);
+    chart_view.setChart(&chart);
+    chart.addAxis(&voltage_axis, Qt::AlignLeft);
+    voltage_axis.setRange(0,1);
+    voltage_axis.setTitleText("Voltage (mV)");
+    time_axis.setRange(0,1000);
+    time_axis.setTitleText("Time (ms)");
+    chart.addAxis(&time_axis, Qt::AlignBottom);
+
+
     this->setLayout(&layout);
   }
 
-  void generate_pulse_width(double prop_on)
+  void generate_pulse_width(double duty_cycle)
   {
     // generate a lineSeries that depicts the PWM signal for that period given
     // sample time
+    double time_on = sd->dt * duty_cycle;
+    double time_off = sd->dt - time_on;
+    pwm_series = std::make_unique<QLineSeries>();
+    chart.addSeries(pwm_series.get());
+    for(double i = 0; i < sd->dt; i += sd->dt*0.1)
+    {
+      if(i <= time_on)
+      {
+        pwm_series->append(1,i);
+      }
+      else
+      {
+        pwm_series->append(0,i);
+      }
+    }
+    chart.update();
 
   }
 };
@@ -295,15 +327,15 @@ struct PIDOutput : public QGroupBox {
   /** @brief Constructor
     @param title of the chart */
   PIDOutput(std::string title, QWidget* parent = nullptr) : QGroupBox(QString::fromStdString(title),parent), r_pwm("Relay PWM",this) {
-    layout.addWidget(&chart_view,0,0);
-    layout.addWidget(&r_pwm,0,1);
+    layout.addWidget(&chart_view,1,0);
+    layout.addWidget(&r_pwm,0,0);
     // Set up chart in SimOut
     this->chart_view.setChart(&this->chart);
 
     chart.addAxis(&temp_axis, Qt::AlignLeft);
-    temp_axis.setRange(0,100);
+    temp_axis.setRange(0,1000);
     temp_axis.setTitleText("Temperature (C)");
-    time_axis.setRange(0,100);
+    time_axis.setRange(0,1000);
     time_axis.setTitleText("Time (ms)");
     chart.addAxis(&time_axis, Qt::AlignBottom);
 
@@ -356,7 +388,7 @@ struct Simulation
       auto pid_gain = pid.calc_gain();
       auto temp = heater.calculate_temp(pid_gain);
       pid.set_current_temp(temp);
-
+      pid_out->r_pwm.generate_pulse_width(pid_gain);
       //plot data
       sd->temp_series->append(sim_time,temp);
 
@@ -373,12 +405,12 @@ struct Simulation
   void adjustAxisRange(QLineSeries* series, QValueAxis* axis) {
     if (!series->points().isEmpty()) {
       qreal min = series->points().first().y();
-      qreal max = series->points().first().y()+50;
+      qreal max = series->points().first().y();
       for (const QPointF& point : series->points()) {
         if (point.y() < min) min =
           point.y();
         if (point.y() > max)
-          max = point.y();
+          max = point.y() + 50;
       }
       axis->setRange(min,max);
     }
