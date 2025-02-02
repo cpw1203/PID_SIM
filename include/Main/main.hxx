@@ -150,11 +150,6 @@ struct PID
     derivative_val = (sd->dt != 0) ? (error - previous_error) / sd->dt : 0.0;
     previous_error = error;
     // calculate PID pre-mapped output
-<<<<<<< HEAD
-
-
-=======
->>>>>>> origin/main
     auto pre_gain = (sd->kp * proportional_val) + (sd->ki * integral_val) + (sd->kd * derivative_val);
     // map the pre_gain to a value between 0 to 1
     auto mapped_gain = std::clamp(pre_gain, 0.0, 1.0); // Linear mapping
@@ -228,13 +223,8 @@ struct PIDInput : public QGroupBox {
     kp.select.setValue(1.5);
     kd.select.setValue(0.05);
     dt.select.setValue(1);
-<<<<<<< HEAD
-    ambient_temp.select.setValue(22.2);
-    disp_coefficient.select.setValue(3);
-=======
     ambient_temp.select.setValue(22.22);
     disp_coefficient.select.setValue(2);
->>>>>>> origin/main
 
     this->setStyleSheet("QGroupBox {background: #242424;  } QGroupBox:Title { color: white; }");
     layout.addWidget(&duration, 0,0,1,-1);
