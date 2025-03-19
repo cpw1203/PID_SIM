@@ -23,7 +23,7 @@ Ensure you have the following installed:
 ### Build Instructions
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/qt-pid-simulator.git
+   git clone https://github.com/cpw1203/PID_SIM.git
    cd qt-pid-simulator
    ```
 2. Configure and build the project:
